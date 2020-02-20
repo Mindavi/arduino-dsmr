@@ -1,3 +1,8 @@
+# Fork
+
+This is a fork of the arduino-dsmr library by mathijskooiman.
+It is changed so it targets vanilla c++(17) without any arduino specific libraries.
+
 Arduino Dutch Smart meter (DSMR) parser
 =======================================
 This is an Arduino library for interfacing with Dutch smart meters, through
