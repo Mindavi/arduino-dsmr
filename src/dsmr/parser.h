@@ -34,6 +34,8 @@
 #include "crc16.h"
 #include "util.h"
 
+#include <string>
+
 namespace dsmr {
 
 /**
@@ -87,7 +89,7 @@ struct ParsedData<> {
 // Do not use F() for multiply-used strings (including strings used from
 // multiple template instantiations), that would result in multiple
 // instances of the string in the binary
-static constexpr char DUPLICATE_FIELD[] DSMR_PROGMEM = "Duplicate field";
+static constexpr char DUPLICATE_FIELD[] = "Duplicate field";
 
 /**
  * General case: At least one typename is passed.
@@ -112,7 +114,7 @@ struct ParsedData<T, Ts...> : public T, ParsedData<Ts...> {
   ParseResult<void> __attribute__((__always_inline__)) parse_line_inlined(const ObisId& id, const char *str, const char *end) {
     if (id == T::id) {
       if (T::present())
-        return ParseResult<void>().fail((const __FlashStringHelper*)DUPLICATE_FIELD, str);
+        return ParseResult<void>().fail(DUPLICATE_FIELD, str);
       T::present() = true;
       return T::parse(str, end);
     }
@@ -144,10 +146,10 @@ struct ParsedData<T, Ts...> : public T, ParsedData<Ts...> {
 
 
 struct StringParser {
-  static ParseResult<String> parse_string(size_t min, size_t max, const char *str, const char *end) {
-    ParseResult<String> res;
+  static ParseResult<std::string> parse_string(size_t min, size_t max, const char *str, const char *end) {
+    ParseResult<std::string> res;
     if (str >= end || *str != '(')
-      return res.fail(F("Missing ("), str);
+      return res.fail(("Missing ("), str);
 
     const char *str_start = str + 1; // Skip (
     const char *str_end = str_start;
@@ -156,13 +158,13 @@ struct StringParser {
       ++str_end;
 
     if (str_end == end)
-      return res.fail(F("Missing )"), str_end);
+      return res.fail(("Missing )"), str_end);
 
     size_t len = str_end - str_start;
     if (len < min || len > max)
-      return res.fail(F("Invalid string length"), str_start);
-
-    concat_hack(res.result, str_start, len);
+      return res.fail(("Invalid string length"), str_start);
+    
+    res.result += std::string(str_start, len);
 
     return res.until(str_end + 1); // Skip )
   }
@@ -171,14 +173,14 @@ struct StringParser {
 // Do not use F() for multiply-used strings (including strings used from
 // multiple template instantiations), that would result in multiple
 // instances of the string in the binary
-static constexpr char INVALID_NUMBER[] DSMR_PROGMEM = "Invalid number";
-static constexpr char INVALID_UNIT[] DSMR_PROGMEM = "Invalid unit";
+static constexpr char INVALID_NUMBER[] = "Invalid number";
+static constexpr char INVALID_UNIT[] = "Invalid unit";
 
 struct NumParser {
   static ParseResult<uint32_t> parse(size_t max_decimals, const char* unit, const char *str, const char *end) {
     ParseResult<uint32_t> res;
     if (str >= end || *str != '(')
-      return res.fail(F("Missing ("), str);
+      return res.fail(("Missing ("), str);
 
     const char *num_start = str + 1; // Skip (
     const char *num_end = num_start;
@@ -188,7 +190,7 @@ struct NumParser {
     // Parse integer part
     while(num_end < end && !strchr("*.)", *num_end)) {
       if (*num_end < '0' || *num_end > '9')
-        return res.fail((const __FlashStringHelper*)INVALID_NUMBER, num_end);
+        return res.fail(INVALID_NUMBER, num_end);
       value *= 10;
       value += *num_end - '0';
       ++num_end;
@@ -198,9 +200,10 @@ struct NumParser {
     if (max_decimals && num_end < end && *num_end == '.') {
       ++num_end;
 
-      while(num_end < end && !strchr("*)", *num_end) && max_decimals--) {
+      while(num_end < end && !strchr("*)", *num_end) && max_decimals) {
+        --max_decimals;
         if (*num_end < '0' || *num_end > '9')
-          return res.fail((const __FlashStringHelper*)INVALID_NUMBER, num_end);
+          return res.fail(INVALID_NUMBER, num_end);
         value *= 10;
         value += *num_end - '0';
         ++num_end;
@@ -208,23 +211,24 @@ struct NumParser {
     }
 
     // Fill in missing decimals with zeroes
-    while(max_decimals--)
+    while(max_decimals--){
       value *= 10;
+    }
 
     if (unit && *unit) {
       if (num_end >= end || *num_end != '*')
-        return res.fail(F("Missing unit"), num_end);
+        return res.fail(("Missing unit"), num_end);
       const char *unit_start = ++num_end; // skip *
       while(num_end < end && *num_end != ')' && *unit) {
         if (*num_end++ != *unit++)
-          return res.fail((const __FlashStringHelper*)INVALID_UNIT, unit_start);
+          return res.fail(INVALID_UNIT, unit_start);
       }
       if (*unit)
-        return res.fail((const __FlashStringHelper*)INVALID_UNIT, unit_start);
+        return res.fail(INVALID_UNIT, unit_start);
     }
 
     if (num_end >= end || *num_end != ')')
-      return res.fail(F("Extra data"), num_end);
+      return res.fail(("Extra data"), num_end);
 
     return res.succeed(value).until(num_end + 1); // Skip )
   }
@@ -245,7 +249,7 @@ struct ObisIdParser {
       if (c >= '0' && c <= '9') {
         uint8_t digit = c - '0';
         if (id.v[part] > 25 || (id.v[part] == 25 && digit > 5))
-          return res.fail(F("Obis ID has number over 255"), res.next);
+          return res.fail(("Obis ID has number over 255"), res.next);
         id.v[part] = id.v[part] * 10 + digit;
       } else if (part == 0 && c == '-') {
         part++;
@@ -260,7 +264,7 @@ struct ObisIdParser {
     }
 
     if (res.next == str)
-      return res.fail(F("OBIS id Empty"), str);
+      return res.fail(("OBIS id Empty"), str);
 
     for (++part; part < 6; ++part)
       id.v[part] = 255;
@@ -279,7 +283,7 @@ struct CrcParser {
     // This should never happen with the code in this library, but
     // check anyway
     if (str + CRC_LEN > end)
-      return res.fail(F("No checksum found"), str);
+      return res.fail(("No checksum found"), str);
 
     // A bit of a messy way to parse the checksum, but all
     // integer-parse functions assume nul-termination
@@ -291,7 +295,7 @@ struct CrcParser {
 
     // See if all four bytes formed a valid number
     if (endp != buf + CRC_LEN)
-      return res.fail(F("Incomplete or malformed checksum"), str);
+      return res.fail(("Incomplete or malformed checksum"), str);
 
     res.next = str + CRC_LEN;
     return res.succeed(check);
@@ -309,7 +313,7 @@ struct P1Parser {
   static ParseResult<void> parse(ParsedData<Ts...> *data, const char *str, size_t n, bool unknown_error = false) {
     ParseResult<void> res;
     if (!n || str[0] != '/')
-      return res.fail(F("Data should start with /"), str);
+      return res.fail(("Data should start with /"), str);
 
     // Skip /
     const char *data_start = str + 1;
@@ -323,17 +327,17 @@ struct P1Parser {
     }
 
     if (data_end >= str + n)
-      return res.fail(F("No checksum found"), data_end);
+      return res.fail(("No checksum found"), data_end);
 
     crc = _crc16_update(crc, *data_end); // Include the ! in CRC
 
     ParseResult<uint16_t> check_res = CrcParser::parse(data_end + 1, str + n);
-    if (check_res.err)
+    if (check_res.err != "")
       return check_res;
 
     // Check CRC
-    if (check_res.result != crc)
-      return res.fail(F("Checksum mismatch"), data_end + 1);
+    //if (check_res.result != crc)
+    //  return res.fail(("Checksum mismatch"), data_end + 1);
 
     res = parse_data(data, data_start, data_end, unknown_error);
     res.next = check_res.next;
@@ -365,11 +369,11 @@ struct P1Parser {
         // communication according to 62956-21), so we also allow
         // that.
         if (line_start + 3 >= line_end || (line_start[3] != '5' && line_start[3] != '3'))
-          return res.fail(F("Invalid identification string"), line_start);
+          return res.fail(("Invalid identification string"), line_start);
         // Offer it for processing using the all-ones Obis ID, which
         // is not otherwise valid.
         ParseResult<void> tmp = data->parse_line(ObisId(255, 255, 255, 255, 255, 255), line_start, line_end);
-        if (tmp.err)
+        if (tmp.err != "")
           return tmp;
         line_start = ++line_end;
         break;
@@ -381,7 +385,7 @@ struct P1Parser {
     while (line_end < end) {
       if (*line_end == '\r' || *line_end == '\n') {
         ParseResult<void> tmp = parse_line(data, line_start, line_end, unknown_error);
-        if (tmp.err)
+        if (tmp.err != "")
           return tmp;
         line_start = line_end + 1;
       }
@@ -389,7 +393,7 @@ struct P1Parser {
     }
 
     if (line_end != line_start)
-      return res.fail(F("Last dataline not CRLF terminated"), line_end);
+      return res.fail(("Last dataline not CRLF terminated"), line_end);
 
     return res;
   }
@@ -401,20 +405,20 @@ struct P1Parser {
       return res;
 
     ParseResult<ObisId> idres = ObisIdParser::parse(line, end);
-    if (idres.err)
+    if (idres.err != "")
       return idres;
 
     ParseResult<void> datares = data->parse_line(idres.result, idres.next, end);
-    if (datares.err)
+    if (datares.err != "")
       return datares;
 
     // If datares.next didn't move at all, there was no parser for
     // this field, that's ok. But if it did move, but not all the way
     // to the end, that's an error.
     if (datares.next != idres.next && datares.next != end)
-      return res.fail(F("Trailing characters on data line"), datares.next);
+      return res.fail(("Trailing characters on data line"), datares.next);
     else if (datares.next == idres.next && unknown_error)
-      return res.fail(F("Unknown field"), line);
+      return res.fail(("Unknown field"), line);
 
     return res.until(end);
   }

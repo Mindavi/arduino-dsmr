@@ -31,13 +31,8 @@
 #ifndef DSMR_INCLUDE_UTIL_H
 #define DSMR_INCLUDE_UTIL_H
 
-#ifdef ARDUINO_ARCH_ESP8266
-#define DSMR_PROGMEM
-#else
-#define DSMR_PROGMEM PROGMEM
-#endif
-
-#include <Arduino.h>
+#include <cstring>
+#include <string>
 
 namespace dsmr {
 
@@ -46,18 +41,6 @@ namespace dsmr {
  */
 template<typename T, unsigned int sz>
 inline unsigned int lengthof(const T (&)[sz]) { return sz; }
-
-// Hack until https://github.com/arduino/Arduino/pull/1936 is merged.
-// This appends the given number of bytes from the given C string to the
-// given Arduino string, without requiring a trailing NUL.
-// Requires that there _is_ room for nul-termination
-static void concat_hack(String& s, const char *append, size_t n) {
-  // Add null termination. Inefficient, but it works...
-  char buf[n + 1];
-  memcpy(buf, append, n);
-  buf[n] = 0;
-  s.concat(buf);
-}
 
 /**
  * The ParseResult<T> class wraps the result of a parse function. The type
@@ -113,10 +96,10 @@ struct _ParseResult<P, void> {
 template <typename T>
 struct ParseResult : public _ParseResult<ParseResult<T>, T> {
   const char *next = NULL;
-  const __FlashStringHelper *err = NULL;
+  std::string err;
   const char *ctx = NULL;
 
-  ParseResult& fail(const __FlashStringHelper *err, const char* ctx = NULL) {
+  ParseResult& fail(const std::string err, const char* ctx = NULL) {
     this->err = err;
     this->ctx = ctx;
     return *this;
@@ -137,8 +120,8 @@ struct ParseResult : public _ParseResult<ParseResult<T>, T> {
    * characters in the total parsed string. These are needed to properly
    * limit the context output.
    */
-  String fullError(const char* start, const char* end) const {
-    String res;
+  std::string fullError(const char* start, const char* end) const {
+    std::string res;
     if (this->ctx && start && end) {
       // Find the entire line surrounding the context
       const char *line_end = this->ctx;
@@ -151,7 +134,7 @@ struct ParseResult : public _ParseResult<ParseResult<T>, T> {
       res.reserve((line_end - line_start) + 2 + (this->ctx - line_start) + 1 + 2);
 
       // Write the line
-      concat_hack(res, line_start, line_end - line_start);
+      res += std::string(line_start, line_end - line_start);
       res += "\r\n";
 
       // Write a marker to point out ctx

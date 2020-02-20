@@ -32,7 +32,6 @@
 #ifndef DSMR_INCLUDE_READER_H
 #define DSMR_INCLUDE_READER_H
 
-#include <Arduino.h>
 #include "crc16.h"
 
 #include "parser.h"

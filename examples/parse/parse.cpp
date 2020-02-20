@@ -11,6 +11,8 @@
 
 #include "dsmr.h"
 
+#include <iostream>
+
 // Data to parse
 const char raw[] =
   "/KFM5KAIFA-METER\r\n"
@@ -128,28 +130,20 @@ struct Printer {
   template<typename Item>
   void apply(Item &i) {
     if (i.present()) {
-      Serial.print(Item::name);
-      Serial.print(F(": "));
-      Serial.print(i.val());
-      Serial.print(Item::unit());
-      Serial.println();
+      std::cout << Item::name << ": " << i.val() << Item::unit() << '\n';
     }
   }
 };
 
-void setup() {
-  Serial.begin(115200);
-
+int main() {
   MyData data;
   ParseResult<void> res = P1Parser::parse(&data, raw, lengthof(raw), true);
-  if (res.err) {
+  if (res.err != "") {
     // Parsing error, show it
-    Serial.println(res.fullError(raw, raw + lengthof(raw)));
+    std::cout << (res.fullError(raw, raw + lengthof(raw)));
   } else {
     // Parsed succesfully, print all values
     data.applyEach(Printer());
   }
 }
 
-void loop () {
-}

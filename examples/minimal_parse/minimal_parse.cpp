@@ -11,6 +11,8 @@
 
 #include "dsmr.h"
 
+#include <iostream>
+
 // Data to parse
 const char msg[] =
   "/KFM5KAIFA-METER\r\n"
@@ -29,23 +31,18 @@ using MyData = ParsedData<
   /* FixedValue */ power_delivered
 >;
 
-void setup() {
-  Serial.begin(115200);
-
+int main() {
   MyData data;
   ParseResult<void> res = P1Parser::parse(&data, msg, lengthof(msg));
-  if (res.err) {
+  if (res.err != "") {
     // Parsing error, show it
-    Serial.println(res.fullError(msg, msg + lengthof(msg)));
+    std::cout << (res.fullError(msg, msg + lengthof(msg)));
   } else if (!data.all_present()) {
-    Serial.println("Some fields are missing");
+    std::cout << "Some fields are missing\n";
   } else {
     // Succesfully parsed, print results:
-    Serial.println(data.identification);
-    Serial.print(data.power_delivered.int_val());
-    Serial.println("W");
+    std::cout << (data.identification);
+    std::cout << (data.power_delivered.int_val());
+    std::cout << ("W\n");
   }
-}
-
-void loop () {
 }
